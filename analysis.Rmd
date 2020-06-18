@@ -1,0 +1,376 @@
+---
+title: "Exploratory analysis of exported cases"
+author: "Sangeeta Bhatia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  word_document:
+    fig_width: 7
+    fig_height: 5
+    fig_caption: true
+    highlight: "tango"
+    reference_docx: word_style.docx
+---
+Note that this analysis relies on data from IATA that are not included in this repository due to 
+confidentiality restrictions.
+
+```{r air-travel-volume-1, echo = FALSE }
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  dev = c("pdf", "png"),
+  dpi = 350,
+  width = 15 / 2.5,
+  height = 10 / 2.5,
+  ## dev.args = list(pointsize = 6),
+  fig.path = "figures/"
+  )
+
+
+palette <- c(
+    Asia = "#E69F00",
+    Europe = "#56B4E9",
+    Africa = "#009E73",
+    `North America` = "#0072B2",
+    Oceania = "#D55E00",
+    `South America` = "#CC79A7"
+)
+
+## To run this file, set the following parameters at the top of the file: ref_country and exclude_repatriated
+## ref country must be one of the following: "sgp", "can", ind", "swe", "npl", "lka" or "all".
+## exclude_repatriated must be TRUE or FALSE
+
+possible_ref_countries <- list(
+
+    sgp = "SGP",
+    can = "CAN",
+    ind = "IND",
+    swe = "swe",
+    npl = "NPL",
+    lka = "LKA",
+    all = c("IND", "SWE", "NPL", "LKA", "PHL", "SGP", "CAN", "FIN")   
+)
+
+ref_countries <- possible_ref_countries[[ref_country]]
+
+## This is from IATA data, not included in the repository
+travel_vol <- readxl::read_excel(
+    "travel_volume.xlsx"
+)
+
+```
+These are outbound flows from Wuhan for Jan to March 2016.
+
+```{r air-travel-volume-2 }
+
+## month_col is the column that contains months 
+travel_vol2 <- dplyr::select(travel_vol, states, month_col)
+## Excluding China
+travel_vol2 <- travel_vol2[travel_vol2$states != "China", ]
+
+## Scaling travel colume. These estimates are from 2016. We have some
+## numbers from 2018, so I calculated the mean annual growth rate since
+## 2016.
+## 18022020 We don't need the scaling factor actually, because it makes
+## no difference to what we are doing.
+scaling_factor <- 1
+travel_vol2$travel_vol <- travel_vol2$travel_vol * scaling_factor
+    
+
+
+```
+
+
+```{r air-travel-volume-3 }
+
+travel_vol2$iso3c <- countrycode::countrycode(
+    travel_vol2$states, "country.name", "iso3c"
+ )
+
+```
+The countries whose ISO3C code is NA here are: 
+
+```{r air-travel-volume-4 }
+dplyr::filter(travel_vol2, is.na(iso3c))
+```
+
+
+## Cases detected overseas
+
+
+
+```{r air-travel-volume-5 }
+## These are the exported cases - 
+## see https://github.com/mrc-ide/COVID19_surveillance_sensitivity/blob/master/exported_cases.csv
+exported <- readr::read_csv("exported_cases_cleaned.csv")
+overall <- nrow(exported)
+
+```
+
+Here we consider cases that were not locally transmitted. 
+We define local transmission as any transmission that occurred outside 
+of China (Hong Kong and Macau as considered outside of China here).
+We only look at cases where local transmission did not happen. 
+That is, at cases with travel history to China.
+
+```{r air-travel-volume-6 }
+
+exported <- dplyr::filter(
+    exported,
+    local_transmission_y_n %in% c("n" , "n - implied", "no")
+  )
+
+exported$travel_history_to_hubei_y_n <- dplyr::case_when(
+
+    exported$travel_history_to_hubei_y_n %in% c("y", "yes") ~ "y",
+    exported$travel_history_to_hubei_y_n %in% c("no", "n", "n - implied") ~ "n",
+    TRUE ~ exported$travel_history_to_hubei_y_n
+)
+
+repatriated <- dplyr::filter(
+    exported,
+    mode_of_transport_plain_train == "air - repatriated",
+    )
+
+```
+
+That is `r nrow(exported)` cases out of `r overall` total cases 
+recorded at the moment. 
+
+```{r}
+
+travel_history <-
+    dplyr::count(exported, country, travel_history_to_hubei_y_n) %>%
+    tidyr::spread(key = travel_history_to_hubei_y_n, n, fill = 0)
+
+travel_history <- dplyr::rename(
+    travel_history,
+    Country = country,
+    `No Travel History to Hubei` = n,
+    `Travel History to Hubei` = y
+)
+
+```
+
+```{r}
+knitr::kable(travel_history)
+```
+
+
+
+
+```{r air-travel-volume-8 }
+
+air_codes <- c(
+    "air",
+    "air (inferred)",
+    "air - repatriated",
+    "air, train",
+    "air, bus", 
+    "air - inferred", "air - implied"
+)
+
+exported <- exported[exported$mode_of_transport_plain_train %in% air_codes, ]
+
+if (exclude_repatriated) {
+    
+    exported <- exported[! (exported$mode_of_transport_plain_train %in% c("air - repatriated")), ]
+}
+
+
+
+```
+`nrow(exported)` are included in the analysis. 
+The earliest date of
+travel is `r min(exported$date_report_dd_mm_yyyy)`.
+
+The latest date of
+travel is `r max(exported$date_report_dd_mm_yyyy)`.
+
+
+
+
+
+
+```{r air-travel-volume-9 }
+by_country <- dplyr::count(exported, country)
+```
+
+
+
+```{r air-travel-volume-11 }
+
+by_country$iso3c <- countrycode::countrycode(
+    by_country$country, "country.name", "iso3c"
+)
+```
+
+
+```{r}
+both <- dplyr::left_join(
+    x = travel_vol2,
+    y = by_country,
+    by = "iso3c"
+  )
+both$monthly_average <- both$travel_vol / 3
+
+
+
+both <- dplyr::left_join(
+    both, continents, by = c("iso3c" = "Three_Letter_Country_Code")
+)
+
+
+both <- both[!is.na(both$iso3c), ]
+no_cases <- which(is.na(both$n))
+both$n[no_cases] <- 0
+
+```
+
+
+
+
+
+
+
+
+
+We assume that the number of cases detected in Singapore $X_{SGP}$ is 
+distributed according to a Poisson distribution with a mean that
+depends linearly on the flow from Wuhan to Singapore. 
+
+$$X_{SGP} \sim Poisson(beta * travel_{sgp})$$
+
+The number of cases detected in a country $I$ is similarly
+distributed according to a Poisson distribution with a mean that
+depends linearly on the flow from Wuhan to $I$, and a multiplicative
+factor $s_e$ which is a measure of the sensitivity of the surveillance
+relative to Singapore.
+
+$$
+X_{I} \sim Poisson(s_e * beta * travel_{I})
+$$
+
+## Maximum Likelihood Estimates for lambda and se
+
+
+```{r air-travel-volume-14}
+
+
+others <- both$iso3c[! both$iso3c  %in% ref_countries]
+
+
+est_with_ci <- purrr::map_dfr(
+    others,
+    function(other) {
+        message(other)
+
+        ll_profile <- likelihood(both, ref_countries, other)
+        out <- extract_ci(ll_profile)
+    }
+  )  
+
+est_with_ci  <- dplyr::left_join(
+    est_with_ci, both, by = "iso3c"
+)
+
+
+```
+
+
+
+
+## Sensitivity of surveillance relative to Singapore
+
+```{r air-travel-volume-15 }
+
+both$slopes <- both$n / both$`Total...5`
+sgp_slope <- both$slopes[both$iso3c == "SGP"]
+
+both$relative_slopes <- both$slopes / sgp_slope
+
+est_with_ci$iso3c <- factor(
+    est_with_ci$iso3c,
+    levels = est_with_ci$iso3c[order(est_with_ci$se_mle, decreasing = TRUE)]
+)
+
+est_with_ci$n <- as.integer(est_with_ci$n)
+
+est_with_ci <- dplyr::mutate_if(
+    est_with_ci, is.numeric, round, digits = 6
+)
+
+```
+
+```{r}
+
+outfile <- "estimated_se_with_ci_ref.csv"
+
+est_with_ci <-
+    dplyr::arrange(est_with_ci, desc(se_ci_high), states)
+
+
+readr::write_csv(x = est_with_ci, path = outfile)
+
+```
+
+
+## Expected number of cases overseas
+
+```{r}
+
+travel_ref <- both$travel_vol[both$iso3c %in% ref_countries]
+travel_obs <- both$n[both$iso3c %in% ref_countries] 
+lhat <- sum(travel_obs) /sum(travel_ref)
+
+lrange <- seq(from = lhat/1000, to = 0.004, by = 0.000001)
+out <- sapply(lrange, function(x) ll3(x, 0, travel_ref, 0, travel_obs, 0))
+
+idx <-  which(abs(max(out) - out) <= 3.84 / 2)
+
+lambda_ci_low <- min(lrange[idx])
+lambda_ci_high <- max(lrange[idx])
+
+expected_case_count <- data.frame(
+    lhat = lhat,
+    llow = lambda_ci_low,
+    lhigh = lambda_ci_high,
+    traffic = both$travel_vol, 
+    continent = both$Continent_Name,
+    country = both$states,
+    obs = both$n,
+    expected = lhat * both$travel_vol,,
+    expected_low = lambda_ci_low * both$travel_vol,,
+    expected_high = lambda_ci_high * both$travel_vol,
+)
+
+
+```
+
+```{r}
+df <- expected_case_count[order(expected_case_count$traffic, decreasing = TRUE), ]
+
+df <- data.frame(
+    Country = df$country,
+    `Expected case count` =  paste0(
+        round(df$expected, 1),
+        " (",
+        round(df$expected_low, 1),
+        ", ",
+        round(df$expected_high, 1),
+        ")"
+      )  
+)
+
+```
+
+```{r}
+knitr::kable(df)
+```
+```{r}
+
+
+expected_case_count <-
+    expected_case_count[order(expected_case_count$traffic, decreasing = TRUE), ]
+
+```
