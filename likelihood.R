@@ -7,13 +7,12 @@ ll3 <- function(beta,
     out <- 0
 
     for (idx in seq_len(length(travel_ref))) {
-
-        lambda_ref <- beta * travel_ref[idx]
-        out <- out + dpois(
-                         x = obs_ref[idx],
-                         lambda = lambda_ref,
-                         log = TRUE
-                     )
+      lambda_ref <- beta * travel_ref[idx]
+      out <- out + dpois(
+                     x = obs_ref[idx],
+                     lambda = lambda_ref,
+                     log = TRUE
+                   )
 
     }
     ##message("out for ref countrries ",  out)
@@ -22,9 +21,9 @@ ll3 <- function(beta,
     ##message("beta ", beta)
     ##message("travel_other ", travel_other)
     out <- out +
-        dpois(
-            x = obs_other, lambda = lambda_other, log = TRUE
-        )
+      dpois(
+        x = obs_other, lambda = lambda_other, log = TRUE
+      )
     ##message("lamda_ref = ", lambda_ref)
     ##message("out = ", out)
 
@@ -42,10 +41,10 @@ likelihood <- function(df, gold, other) {
     nonref <- which(df$iso3c == other)
 
     ref_obs <- as.integer(df$n[ref])
-    ref_vol <- df$`Total...5`[ref]
+    ref_vol <- df$travel_vol[ref]
 
     nonref_obs <- as.integer(df$n[nonref])
-    nonref_vol <- df$`Total...5`[nonref]
+    nonref_vol <- df$travel_vol[nonref]
 
     ##mle_lambda <- mean(ref_obs / ref_vol)
     mle_lambda <- sum(ref_obs) / sum(ref_vol)
