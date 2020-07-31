@@ -2,17 +2,18 @@
 library(dplyr)
 
 ## read data set
-international <- readr::read_csv("exported_cases_paper_test.csv")
+international <- readr::read_csv("exported_cases.csv")
+exported <- dplyr::filter(
+  international,
+  local_transmission_y_n %in% c("n" , "n - implied", "no")
+)
+
 ## total number of exported cases
 overall <- nrow(exported)
 ## whether we want to include or exclude repatriated cases from our analysis or not. TRUE --> exclude
 exclude_repatriated <- TRUE
 
 ## cases that weren't local transmission -- local = any transmission outside mainland china
-exported <- dplyr::filter(
-  international,
-  local_transmission_y_n %in% c("n" , "n - implied", "no")
-)
 
 ## recoding ambiguous travel histories to correct meanings
 exported$travel_history_to_hubei_y_n <- dplyr::case_when(
@@ -25,11 +26,11 @@ exported$travel_history_to_hubei_y_n <- dplyr::case_when(
 repatriated <- dplyr::filter(
   exported,
   mode_of_transport_plain_train == "air - repatriated",
-  ### check this as this line was missing from the Rmd file 
+  ### check this as this line was missing from the Rmd file
   repatriated == "yes"
 )
 
-## countries and their travel history information 
+## countries and their travel history information
 travel_history <-
   dplyr::count(exported, country, travel_history_to_hubei_y_n) %>%
   tidyr::spread(key = travel_history_to_hubei_y_n, n, fill = 0)
@@ -56,7 +57,7 @@ air_codes <- c(
   "air (inferred)",
   "air - repatriated",
   "air, train",
-  "air, bus", 
+  "air, bus",
   "air - inferred", "air - implied"
 )
 
